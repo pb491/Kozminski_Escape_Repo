@@ -308,7 +308,8 @@
     </div>
 
     <!-- 5. Poprawne podpięcie zewnętrznych skryptów -->
-    <script type="module" src="./js/audio.js"></script>
-    <script type="module" src="./js/game.js"></script>
+    <!-- These scripts use no imports; classic scripts also run when index.html is opened locally. -->
+    <script src="./js/audio.js"></script>
+    <script src="./js/game.js"></script>
   </body>
 </html>
