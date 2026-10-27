@@ -44,6 +44,10 @@ class KozminskiEscapeGame {
     this.soundIcon = document.getElementById('sound-icon');
     this.btnPauseToggle = document.getElementById('btn-pause-toggle');
     this.pauseIcon = document.getElementById('pause-icon');
+    this.btnArtillery = document.getElementById('btn-artillery');
+    this.artilleryTimerEl = document.getElementById('artillery-timer');
+    this.btnTouchArtillery = document.getElementById('btn-touch-artillery');
+    this.touchArtilleryTextEl = document.getElementById('touch-artillery-text');
 
     // Statystyki do podsumowania
     this.gameoverEctsEl = document.getElementById('gameover-ects-value');
@@ -76,6 +80,15 @@ class KozminskiEscapeGame {
       '„Termin składania prac minął 15 minut temu. Widzimy się na powtarzaniu przedmiotu!”',
     ];
 
+    // Cytaty profesora po trafieniu artylerią
+    this.artilleryQuotes = [
+      '„Co to za bezczelność?! Kto wydał rozkaz salwy artyleryjskiej z Dziekanatu?!”',
+      '„Ała! Mój protokół ocen! Idę do kąta przemyśleć swoje zachowanie...”',
+      '„Regulamin studiów nie przewidywał bombardowania! Stoję w kącie!”',
+      '„Brak słów! 10 sekund w kącie na ochłonięcie... Ale poprawka i tak będzie!”',
+      '„To zamach na autonomię uczelni! Spisuję Wasze nazwiska z tego kąta!”',
+    ];
+
     // Klawisze i wejście
     this.keys = {
       up: false,
@@ -84,6 +97,17 @@ class KozminskiEscapeGame {
       right: false,
       sprint: false,
     };
+
+    // Artyleria akademicka (cooldown 2 minuty = 120s)
+    this.artilleryCooldown = 0;
+    this.artilleryMaxCooldown = 120;
+    this.examinerInCorner = false;
+    this.cornerStunTimer = 0;
+    this.cornerDuration = 10;
+    this.designatedCorner = { x: 50, y: 50 };
+    this.screenShake = 0;
+    this.flashAlpha = 0;
+    this.activeStrikes = [];
 
     // Czas i pętla
     this.state = GameState.TITLE_MENU;
@@ -195,6 +219,14 @@ class KozminskiEscapeGame {
     // Cząsteczki efektów wizualnych
     this.particles = [];
 
+    // Reset artylerii i kąta
+    this.artilleryCooldown = 0;
+    this.examinerInCorner = false;
+    this.cornerStunTimer = 0;
+    this.screenShake = 0;
+    this.flashAlpha = 0;
+    this.activeStrikes = [];
+
     // Reset HUD
     this.updateHUD();
     this.hideSpeechBubble();
@@ -259,6 +291,9 @@ class KozminskiEscapeGame {
       if (['ArrowLeft', 'KeyA'].includes(e.code)) this.keys.left = true;
       if (['ArrowRight', 'KeyD'].includes(e.code)) this.keys.right = true;
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.keys.sprint = true;
+      if (['KeyR', 'KeyE'].includes(e.code)) {
+        this.fireArtillery();
+      }
       if (e.code === 'Space' || e.code === 'KeyP') {
         this.togglePause();
       }
@@ -300,6 +335,22 @@ class KozminskiEscapeGame {
     bindTouchButton('btn-touch-left', 'left');
     bindTouchButton('btn-touch-right', 'right');
     bindTouchButton('btn-touch-sprint', 'sprint');
+
+    // Przyciski artylerii (HUD oraz dotykowy)
+    if (this.btnArtillery) {
+      this.btnArtillery.addEventListener('click', () => {
+        this.fireArtillery();
+      });
+    }
+
+    if (this.btnTouchArtillery) {
+      const handleTouchArtillery = (ev) => {
+        ev.preventDefault();
+        this.fireArtillery();
+      };
+      this.btnTouchArtillery.addEventListener('touchstart', handleTouchArtillery, { passive: false });
+      this.btnTouchArtillery.addEventListener('mousedown', handleTouchArtillery);
+    }
 
     // Przyciski modali
     this.btnStart.addEventListener('click', () => {
@@ -374,10 +425,90 @@ class KozminskiEscapeGame {
     return false;
   }
 
+  /**
+   * Wystrzał artylerii akademickiej - odsyła wykładowcę do kąta na 10 sekund (cooldown: 120s)
+   */
+  fireArtillery() {
+    if (this.state !== GameState.PLAYING) return;
+    if (this.artilleryCooldown > 0) return;
+
+    // Rozpoczęcie cooldownu 2 minuty (120 sekund)
+    this.artilleryCooldown = this.artilleryMaxCooldown;
+
+    // Dźwięk artylerii (gwizd + potężny wybuch)
+    if (window.soundManager) {
+      window.soundManager.playArtilleryStrike();
+    }
+
+    const ex = this.examiner;
+    this.activeStrikes.push({
+      startX: ex.x + (Math.random() - 0.5) * 40,
+      startY: -40,
+      targetX: ex.x,
+      targetY: ex.y,
+      progress: 0,
+      duration: 0.35,
+      exploded: false,
+      fadeTimer: 0,
+    });
+
+    this.updateHUD();
+  }
+
   update(dt) {
     if (this.state !== GameState.PLAYING) return;
 
     this.elapsedSeconds += dt;
+
+    // Cooldown artylerii
+    if (this.artilleryCooldown > 0) {
+      this.artilleryCooldown = Math.max(0, this.artilleryCooldown - dt);
+    }
+
+    // Wstrząs ekranu i błysk wybuchu
+    if (this.screenShake > 0) {
+      this.screenShake = Math.max(0, this.screenShake - dt * 2.2);
+    }
+    if (this.flashAlpha > 0) {
+      this.flashAlpha = Math.max(0, this.flashAlpha - dt * 3.5);
+    }
+
+    // Przetwarzanie uderzeń artylerii
+    for (let i = this.activeStrikes.length - 1; i >= 0; i--) {
+      const strike = this.activeStrikes[i];
+      strike.progress += dt;
+      if (!strike.exploded && strike.progress >= strike.duration) {
+        strike.exploded = true;
+        strike.fadeTimer = 0.55;
+        this.screenShake = 0.55;
+        this.flashAlpha = 0.65;
+
+        // Eksplozja cząsteczek
+        this.createSparkleParticles(strike.targetX, strike.targetY, '#ef4444', 24);
+        this.createSparkleParticles(strike.targetX, strike.targetY, '#f59e0b', 20);
+        this.createSparkleParticles(strike.targetX, strike.targetY, '#ffffff', 14);
+        this.createPaperParticles(strike.targetX, strike.targetY, 14);
+
+        // Odesłanie egzaminatora bezpośrednio do kąta w Budynku A
+        this.examiner.x = this.designatedCorner.x;
+        this.examiner.y = this.designatedCorner.y;
+        this.examiner.facingAngle = -Math.PI * 0.75;
+        this.examinerInCorner = true;
+        this.cornerStunTimer = this.cornerDuration;
+
+        // Efekt pyłu w kącie
+        this.createSparkleParticles(this.designatedCorner.x, this.designatedCorner.y, '#94a3b8', 16);
+
+        // Cytat profesora po trafieniu
+        const quote = this.artilleryQuotes[Math.floor(Math.random() * this.artilleryQuotes.length)];
+        this.showProfessorSpeech(quote, 4.5);
+      } else if (strike.exploded) {
+        strike.fadeTimer -= dt;
+        if (strike.fadeTimer <= 0) {
+          this.activeStrikes.splice(i, 1);
+        }
+      }
+    }
 
     // Dymek profesora licznik
     if (this.bubbleTimer > 0) {
@@ -472,6 +603,20 @@ class KozminskiEscapeGame {
   updateExaminer(dt) {
     const ex = this.examiner;
     const p = this.player;
+
+    // Jeśli wykładowca został wysłany do kąta przez artylerię
+    if (this.examinerInCorner) {
+      this.cornerStunTimer -= dt;
+      ex.x = this.designatedCorner.x;
+      ex.y = this.designatedCorner.y;
+      ex.facingAngle = -Math.PI * 0.75; // Stoi twarzą do narożnika
+
+      if (this.cornerStunTimer <= 0) {
+        this.examinerInCorner = false;
+        this.showProfessorSpeech('„Koniec kary w kącie! Wracam po Wasze indeksy!”', 3);
+      }
+      return;
+    }
 
     // Prędkość skaluje się wraz ze zdobytymi punktami ECTS (rośnie napięcie sesji!)
     const speedScale = 1 + (this.ects / this.targetEcts) * 0.45;
@@ -616,11 +761,35 @@ class KozminskiEscapeGame {
     }
   }
 
+  createPaperParticles(x, y, count = 12) {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1.5 + Math.random() * 4;
+      this.particles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 1.5,
+        size: 3 + Math.random() * 4,
+        color: '#ffffff',
+        life: 0.9 + Math.random() * 0.5,
+        maxLife: 1.4,
+        isPaper: true,
+        angle: Math.random() * Math.PI * 2,
+        vAngle: (Math.random() - 0.5) * 8,
+      });
+    }
+  }
+
   updateParticles(dt) {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.x += p.vx;
       p.y += p.vy;
+      if (p.isPaper) {
+        p.angle = (p.angle || 0) + (p.vAngle || 0) * dt;
+        p.vy += 35 * dt; // Lekka grawitacja dla opadających kartek egzaminacyjnych
+      }
       p.life -= dt;
       if (p.life <= 0) {
         this.particles.splice(i, 1);
@@ -650,6 +819,38 @@ class KozminskiEscapeGame {
     const currentZone = this.zones.find((z) => px >= z.x && px <= z.x + z.w);
     if (currentZone) {
       this.campusStatusEl.textContent = currentZone.name;
+    }
+
+    // Aktualizacja stanu przycisku artylerii w HUD
+    if (this.btnArtillery && this.artilleryTimerEl) {
+      if (this.artilleryCooldown <= 0) {
+        this.btnArtillery.classList.add('is-ready');
+        this.btnArtillery.classList.remove('is-cooldown');
+        this.artilleryTimerEl.textContent = 'GOTOWA (R)';
+        this.btnArtillery.title = 'Artyleria gotowa! Kliknij lub naciśnij R, by posłać wykładowcę do kąta na 10 sekund!';
+      } else {
+        this.btnArtillery.classList.remove('is-ready');
+        this.btnArtillery.classList.add('is-cooldown');
+        const mins = Math.floor(this.artilleryCooldown / 60);
+        const secs = Math.floor(this.artilleryCooldown % 60);
+        const formatted = `${mins}:${secs.toString().padStart(2, '0')}`;
+        this.artilleryTimerEl.textContent = formatted;
+        this.btnArtillery.title = `Artyleria w trakcie ładowania (pozostało: ${formatted})`;
+      }
+    }
+
+    // Aktualizacja przycisku dotykowego artylerii
+    if (this.btnTouchArtillery && this.touchArtilleryTextEl) {
+      if (this.artilleryCooldown <= 0) {
+        this.btnTouchArtillery.classList.add('is-ready');
+        this.btnTouchArtillery.classList.remove('is-cooldown');
+        this.touchArtilleryTextEl.textContent = 'DO KĄTA!';
+      } else {
+        this.btnTouchArtillery.classList.remove('is-ready');
+        this.btnTouchArtillery.classList.add('is-cooldown');
+        const secs = Math.ceil(this.artilleryCooldown);
+        this.touchArtilleryTextEl.textContent = `${secs}s`;
+      }
     }
   }
 
@@ -695,6 +896,15 @@ class KozminskiEscapeGame {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.width, this.height);
 
+    ctx.save();
+    // Efekt wstrząsu ekranu (Screen Shake) od artylerii
+    if (this.screenShake > 0) {
+      const shakeMag = this.screenShake * 10;
+      const shakeX = (Math.random() - 0.5) * shakeMag;
+      const shakeY = (Math.random() - 0.5) * shakeMag;
+      ctx.translate(shakeX, shakeY);
+    }
+
     // 1. Tło Kampusu (3 strefy: Budynek A, Zielone Patio, Budynek D)
     this.renderCampusBackground(ctx);
 
@@ -719,7 +929,18 @@ class KozminskiEscapeGame {
     // 8. Student (Gracz)
     this.renderPlayer(ctx);
 
-    // 9. Komunikat pauzy na canvasie
+    // 9. Salwy i fale uderzeniowe artylerii
+    this.renderArtilleryStrikes(ctx);
+
+    ctx.restore();
+
+    // 10. Błysk eksplozji
+    if (this.flashAlpha > 0) {
+      ctx.fillStyle = `rgba(255, 255, 255, ${this.flashAlpha})`;
+      ctx.fillRect(0, 0, this.width, this.height);
+    }
+
+    // 11. Komunikat pauzy na canvasie
     if (this.state === GameState.PAUSED) {
       ctx.fillStyle = 'rgba(7, 21, 43, 0.7)';
       ctx.fillRect(0, 0, this.width, this.height);
@@ -735,10 +956,97 @@ class KozminskiEscapeGame {
     }
   }
 
+  renderArtilleryStrikes(ctx) {
+    this.activeStrikes.forEach((strike) => {
+      const tx = strike.targetX;
+      const ty = strike.targetY;
+
+      if (!strike.exploded) {
+        const p = Math.min(1, strike.progress / strike.duration);
+
+        // Czerwony celownik artyleryjski
+        ctx.save();
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+
+        const radius = 22 + Math.sin(strike.progress * 25) * 4;
+        ctx.beginPath();
+        ctx.arc(tx, ty, radius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(tx - 30, ty);
+        ctx.lineTo(tx + 30, ty);
+        ctx.moveTo(tx, ty - 30);
+        ctx.lineTo(tx, ty + 30);
+        ctx.stroke();
+
+        ctx.fillStyle = '#ef4444';
+        ctx.font = 'bold 9px Plus Jakarta Sans, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('CEL: ARTYLERIA', tx, ty - 32);
+
+        // Nadlatujący pocisk z góry
+        const curX = strike.startX + (tx - strike.startX) * p;
+        const curY = strike.startY + (ty - strike.startY) * p;
+
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(curX, curY - 35);
+        ctx.lineTo(curX, curY);
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(curX, curY, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      } else {
+        // Fala uderzeniowa po uderzeniu
+        const fade = Math.max(0, strike.fadeTimer / 0.55);
+        const waveRadius = (1 - fade) * 75;
+
+        ctx.save();
+        ctx.strokeStyle = `rgba(239, 68, 68, ${fade * 0.8})`;
+        ctx.lineWidth = 3 * fade;
+        ctx.beginPath();
+        ctx.arc(tx, ty, waveRadius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = `rgba(245, 158, 11, ${fade * 0.9})`;
+        ctx.lineWidth = 2 * fade;
+        ctx.beginPath();
+        ctx.arc(tx, ty, waveRadius * 0.65, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    });
+  }
+
   renderCampusBackground(ctx) {
     // Strefa 1: Budynek A (Hol Główny) - posadzka w szachownicę / kafelki
     ctx.fillStyle = '#101d30';
     ctx.fillRect(0, 0, 260, this.height);
+
+    // Kącik karny / Kąt dla Egzaminatora (Budynek A, lewy górny narożnik)
+    ctx.save();
+    ctx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(18, 18, 66, 66);
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(239, 68, 68, 0.08)';
+    ctx.fillRect(18, 18, 66, 66);
+    ctx.fillStyle = '#f87171';
+    ctx.font = 'bold 8px Plus Jakarta Sans, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('KĄT DLA', 51, 38);
+    ctx.fillText('WYKŁADOWCY', 51, 48);
+    ctx.restore();
 
     // Kafelki w Holu A
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
@@ -981,6 +1289,69 @@ class KozminskiEscapeGame {
     const ex = this.examiner;
     ctx.save();
     ctx.translate(ex.x, ex.y);
+
+    // Gdy wykładowca stoi w kącie ukarany przez artylerię
+    if (this.examinerInCorner) {
+      // Aura stania w kącie
+      ctx.fillStyle = 'rgba(245, 158, 11, 0.2)';
+      ctx.beginPath();
+      ctx.arc(0, 0, ex.radius + 12, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ciało profesora odwrócone twarzą do ściany
+      ctx.save();
+      ctx.rotate(ex.facingAngle);
+
+      // Garnitur profesora
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(0, 0, ex.radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Teczka z dokumentami
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(-ex.radius - 3, -7, 6, 14);
+
+      // Koszula i krawat
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-1, -4, 5, 8);
+      ctx.fillStyle = '#dc2626';
+      ctx.fillRect(0, -2, 4, 4);
+
+      // Głowa profesora
+      ctx.fillStyle = '#fde047';
+      ctx.beginPath();
+      ctx.arc(4, 0, 7, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+
+      // Animowane wirujące gwiazdki / oszołomienie
+      const dizzyAngle = performance.now() * 0.005;
+      const dX = Math.cos(dizzyAngle) * 12;
+      const dY = Math.sin(dizzyAngle) * 5 - 20;
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('💫', dX, dY);
+
+      // Etykieta stania w kącie z odliczaniem czasu
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(-42, 22, 84, 18, 5);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = 'bold 9px Plus Jakarta Sans, sans-serif';
+      ctx.fillText(`W KĄCIE: ${Math.ceil(this.cornerStunTimer)}s`, 0, 31);
+
+      ctx.restore();
+      return;
+    }
+
     ctx.rotate(ex.facingAngle);
 
     // Aura zagrożenia / egzaminatora
@@ -1022,13 +1393,24 @@ class KozminskiEscapeGame {
 
   renderParticles(ctx) {
     this.particles.forEach((p) => {
-      ctx.fillStyle = p.color;
+      ctx.save();
       ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fill();
+      if (p.isPaper) {
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle || 0);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-p.size, -p.size * 0.7, p.size * 2, p.size * 1.4);
+        ctx.strokeStyle = 'rgba(0, 34, 68, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-p.size, -p.size * 0.7, p.size * 2, p.size * 1.4);
+      } else {
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
     });
-    ctx.globalAlpha = 1.0;
   }
 
   gameLoop(currentTime) {
@@ -1043,6 +1425,14 @@ class KozminskiEscapeGame {
 }
 
 // Inicjalizacja gry po załadowaniu drzewa DOM
-window.addEventListener('DOMContentLoaded', () => {
-  window.kozminskiGame = new KozminskiEscapeGame();
-});
+function initKozminskiGame() {
+  if (!window.kozminskiGame) {
+    window.kozminskiGame = new KozminskiEscapeGame();
+  }
+}
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', initKozminskiGame);
+} else {
+  initKozminskiGame();
+}

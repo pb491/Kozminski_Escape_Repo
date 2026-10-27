@@ -57,8 +57,15 @@
           <div id="campus-status" class="hud-status-text">Budynek A · Hol Główny</div>
         </div>
 
-        <!-- Przyciski pomocnicze HUD (Dźwięk / Pauza) -->
+        <!-- Przyciski pomocnicze HUD (Artyleria / Dźwięk / Pauza) -->
         <div class="hud-controls">
+          <button id="btn-artillery" class="hud-btn-artillery is-ready" type="button" aria-label="Wystrzel artylerię" title="Odeślij wykładowcę do kąta! (Klawisz R)">
+            <span class="artillery-icon">🎯</span>
+            <span class="artillery-text-group">
+              <span class="artillery-title">ARTYLERIA</span>
+              <span id="artillery-timer" class="artillery-status hud-mono">GOTOWA (R)</span>
+            </span>
+          </button>
           <button id="btn-sound-toggle" class="hud-btn" type="button" aria-label="Włącz/Wyłącz dźwięk" title="Wycisz lub włącz dźwięki">
             <span id="sound-icon">🔊</span>
           </button>
@@ -113,8 +120,12 @@
             <div class="dpad-empty"></div>
           </div>
 
-          <!-- Przycisk sprintu i interakcji -->
+          <!-- Przycisk sprintu i interakcji / artylerii -->
           <div class="touch-action-group">
+            <button id="btn-touch-artillery" class="touch-action-btn artillery-touch-btn is-ready" type="button" aria-label="Wystrzel artylerię">
+              <span class="artillery-icon">🎯</span>
+              <span id="touch-artillery-text" class="sprint-text">DO KĄTA!</span>
+            </button>
             <button id="btn-touch-sprint" class="touch-action-btn sprint-btn" type="button" aria-label="Sprint">
               <span class="sprint-icon">⚡</span>
               <span class="sprint-text">SPRINT</span>
@@ -170,6 +181,14 @@
               </div>
 
               <div class="legend-card">
+                <div class="legend-icon">🎯</div>
+                <div class="legend-text">
+                  <div class="legend-title">Artyleria Dziekanatu (Klawisz R)</div>
+                  <div class="legend-desc">Dostępna <strong>raz na 2 minuty</strong>. Odpala salwę i odsyła wykładowcę do kąta na 10 sekund!</div>
+                </div>
+              </div>
+
+              <div class="legend-card">
                 <div class="legend-icon">👨‍🏫</div>
                 <div class="legend-text">
                   <div class="legend-title">Surowy Egzaminator</div>
@@ -187,10 +206,13 @@
                 <span class="control-key">SHIFT</span> Sprint (zużywa staminę)
               </div>
               <div class="controls-row">
+                <span class="control-key">R / E</span> Artyleria (odsyła profesora do kąta na 10s)
+              </div>
+              <div class="controls-row">
                 <span class="control-key">SPACJA / P</span> Pauza w grze
               </div>
               <div class="controls-row mobile-hint">
-                <span class="control-key">📱 Ekrany dotykowe</span> Użyj wirtualnego D-pada i przycisku Sprint
+                <span class="control-key">📱 Ekrany dotykowe</span> Użyj D-pada oraz przycisków SPRINT i DO KĄTA!
               </div>
             </div>
           </div>
@@ -285,8 +307,8 @@
       </section>
     </div>
 
-    <!-- 5. Poprawne podpięcie zewnętrznych skryptów (ścieżki względne dla GitHub Pages) -->
-    <script src="./js/audio.js"></script>
-    <script src="./js/game.js"></script>
+    <!-- 5. Poprawne podpięcie zewnętrznych skryptów -->
+    <script type="module" src="./js/audio.js"></script>
+    <script type="module" src="./js/game.js"></script>
   </body>
 </html>

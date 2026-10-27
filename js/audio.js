@@ -132,6 +132,64 @@ class SoundManager {
   }
 
   /**
+   * Dźwięk uderzenia artylerii akademickiej (gwizd pocisku + potężny wybuch i basowy huk)
+   */
+  playArtilleryStrike() {
+    if (this.isMuted) return;
+    this.resumeContext();
+    if (!this.audioCtx) return;
+
+    const ctx = this.audioCtx;
+    const now = ctx.currentTime;
+
+    // 1. Gwizd pocisku spadającego z góry (whistle / descending pitch)
+    const whistleOsc = ctx.createOscillator();
+    const whistleGain = ctx.createGain();
+    whistleOsc.type = 'sawtooth';
+    whistleOsc.frequency.setValueAtTime(1400, now);
+    whistleOsc.frequency.exponentialRampToValueAtTime(320, now + 0.35);
+
+    whistleGain.gain.setValueAtTime(0.09, now);
+    whistleGain.gain.exponentialRampToValueAtTime(0.22, now + 0.32);
+    whistleGain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+
+    whistleOsc.connect(whistleGain);
+    whistleGain.connect(ctx.destination);
+    whistleOsc.start(now);
+    whistleOsc.stop(now + 0.36);
+
+    // 2. Eksplozja basowa (deep impact boom)
+    const boomOsc = ctx.createOscillator();
+    const boomGain = ctx.createGain();
+    boomOsc.type = 'triangle';
+    boomOsc.frequency.setValueAtTime(200, now + 0.35);
+    boomOsc.frequency.exponentialRampToValueAtTime(32, now + 0.95);
+
+    boomGain.gain.setValueAtTime(0.35, now + 0.35);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+
+    boomOsc.connect(boomGain);
+    boomGain.connect(ctx.destination);
+    boomOsc.start(now + 0.35);
+    boomOsc.stop(now + 1.05);
+
+    // 3. Chrupiący szum uderzenia
+    const noiseOsc = ctx.createOscillator();
+    const noiseGain = ctx.createGain();
+    noiseOsc.type = 'square';
+    noiseOsc.frequency.setValueAtTime(90, now + 0.35);
+    noiseOsc.frequency.linearRampToValueAtTime(20, now + 0.7);
+
+    noiseGain.gain.setValueAtTime(0.18, now + 0.35);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
+
+    noiseOsc.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noiseOsc.start(now + 0.35);
+    noiseOsc.stop(now + 0.8);
+  }
+
+  /**
    * Dźwięk okrzyku profesora / alarmu egzaminacyjnego
    */
   playProfessorAlert() {
